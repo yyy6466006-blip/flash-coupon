@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>後台統計</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700&family=Noto+Sans+TC:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');
+  :root{
+    --navy:#1D2B4F; --navy-soft:#33406b; --panel:#FFF8F9; --bg:#F3E9EC;
+    --gold:#B98B2E; --gold-soft:#E9D9B0; --text:#26263a; --muted:#7c7c92;
+    --usedbg:#F6E3E3; --used:#a03434; --openbg:#E3F1E6; --open:#1f6b34;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Noto Sans TC', sans-serif; background:var(--bg); min-height:100vh; padding:24px 16px; }
+  .wrap{ max-width:640px; margin:0 auto; }
+  h1{ font-family:'Noto Serif TC', serif; color:var(--navy); font-size:20px; text-align:center; margin-bottom:18px; }
+  .card{ background:var(--panel); border-radius:18px; padding:20px; box-shadow:0 12px 30px rgba(29,43,79,0.14); margin-bottom:14px; }
+  input{ width:100%; padding:11px 12px; border-radius:9px; border:1.5px solid var(--gold-soft); font-size:15px; margin-bottom:10px; }
+  button{ width:100%; padding:12px; border:none; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; background:var(--navy); color:#fff; }
+  .stats-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+  .stat{ background:var(--panel); border-radius:14px; padding:16px; text-align:center; box-shadow:0 8px 20px rgba(29,43,79,0.1); }
+  .stat-num{ font-family:'Space Mono', monospace; font-size:28px; font-weight:700; color:var(--navy); }
+  .stat-label{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  th{ text-align:left; padding:6px; color:var(--muted); border-bottom:1.5px solid var(--gold-soft); position:sticky; top:0; background:var(--panel); }
+  td{ padding:6px; border-bottom:1px solid #f0e0e5; font-family:'Space Mono', monospace; }
+  .pill{ padding:2px 9px; border-radius:16px; font-size:10.5px; font-weight:700; font-family:'Noto Sans TC', sans-serif; }
+  .pill-used{ background:var(--usedbg); color:var(--used); }
+  .pill-open{ background:var(--openbg); color:var(--open); }
+  .tablewrap{ max-height:360px; overflow-y:auto; }
+  #gate{ max-width:340px; margin:60px auto 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="gate">
+    <h1>📊 後台統計</h1>
+    <div class="card">
+      <input type="email" id="email" placeholder="管理員帳號 (Email)" autocomplete="username" />
+      <input type="password" id="password" placeholder="密碼" autocomplete="current-password" />
+      <button id="enterBtn">登入後台</button>
+      <div id="gateMsg"></div>
+    </div>
+  </div>
+  <div id="dashArea" style="display:none;">
+    <h1>📊 優惠券後台統計</h1>
+    <button id="logoutBtn" style="background:var(--navy-soft); margin-bottom:10px;">登出</button>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-num" id="numTotal">-</div><div class="stat-label">累計發放張數</div></div>
+      <div class="stat"><div class="stat-num" id="numUsed">-</div><div class="stat-label">累計兌換張數</div></div>
+    </div>
+    <div class="card" id="dayBreakdown"></div>
+
+    <div class="card">
+      <div style="font-weight:700; color:var(--navy); margin-bottom:10px; font-size:14px;">📅 多天彙總報表</div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <input type="date" id="rangeStart" style="margin-bottom:0;" />
+        <input type="date" id="rangeEnd" style="margin-bottom:0;" />
+      </div>
+      <button id="calcRangeBtn" style="background:var(--gold);">計算這段期間</button>
+      <div id="rangeResult" style="margin-top:10px; font-size:13px; color:var(--text); line-height:1.8;"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700; color:var(--navy); margin-bottom:10px; font-size:14px;">🔍 依日期查詢核銷明細</div>
+      <select id="dateFilter" style="width:100%; padding:10px; border-radius:9px; border:1.5px solid var(--gold-soft); font-size:14px; margin-bottom:10px;"></select>
+      <div id="detailSummary" style="font-size:12.5px; color:var(--muted); margin-bottom:8px;"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>核銷時間</th><th>代碼</th><th>顧客</th></tr></thead>
+          <tbody id="detailBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card tablewrap">
+      <table>
+        <thead><tr><th>代碼</th><th>顧客</th><th>日期</th><th>核銷時間</th><th>狀態</th></tr></thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+    <button id="refreshBtn" style="margin-top:8px;">重新整理</button>
+    <div style="text-align:center; font-size:11px; color:var(--muted); margin-top:6px;">每 30 秒自動更新一次</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  // ====== 請填入你自己的設定 ======
+  const SUPABASE_URL = 'https://nagwmruivgyyrdurvwrg.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_6KfIDNqzuOJXxlIf9koXeQ_O-XgmeU3';
+  // ================================
+  // 這裡不再需要填寫密碼：管理員帳號是在 Supabase 後台的
+  // 「Authentication → Users」裡建立的，登入時輸入那組 Email + 密碼即可。
+  // 資料表本身設定了 RLS：只有「登入成功」的管理員才讀得到優惠券資料，
+  // 沒登入的人就算打開瀏覽器主控台，也拿不到任何一筆資料。
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let refreshTimer = null;
+  function startAutoRefresh(){
+    if(refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(loadDashboard, 30000);
+  }
+  function stopAutoRefresh(){
+    if(refreshTimer){ clearInterval(refreshTimer); refreshTimer = null; }
+  }
+
+  async function tryEnterDashboard(){
+    const { data: { session } } = await supabase.auth.getSession();
+    if(session){
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('dashArea').style.display = 'block';
+      loadDashboard();
+      startAutoRefresh();
+      return true;
+    }
+    return false;
+  }
+
+  document.getElementById('enterBtn').onclick = async () => {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    document.getElementById('gateMsg').innerHTML = '';
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error){
+      document.getElementById('gateMsg').innerHTML = `<div style="color:#a03434;font-size:13px;margin-top:6px;">帳號或密碼錯誤</div>`;
+      return;
+    }
+    await tryEnterDashboard();
+  };
+
+  document.getElementById('logoutBtn').onclick = async () => {
+    stopAutoRefresh();
+    await supabase.auth.signOut();
+    document.getElementById('dashArea').style.display = 'none';
+    document.getElementById('gate').style.display = 'block';
+  };
+
+  document.getElementById('refreshBtn').onclick = loadDashboard;
+
+  document.getElementById('dateFilter').onchange = () => renderDetail(document.getElementById('dateFilter').value);
+
+  // 如果先前已經登入過（尚未登出），重新整理頁面時直接進後台，不用再輸入一次
+  tryEnterDashboard();
+
+  let allCoupons = [];
+  let byDayData = {};
+
+  function formatTime(ts){
+    if(!ts) return '-';
+    return new Date(ts).toLocaleTimeString('zh-TW', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false, timeZone:'Asia/Taipei' });
+  }
+  function usedDateStr(ts){
+    if(!ts) return null;
+    // 轉成台灣時區的 YYYY-MM-DD，用來分組「核銷當天」
+    const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone:'Asia/Taipei' }));
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+
+  function calcRange(){
+    const start = document.getElementById('rangeStart').value;
+    const end = document.getElementById('rangeEnd').value;
+    const resultEl = document.getElementById('rangeResult');
+    if(!start || !end){
+      resultEl.textContent = '請選擇開始與結束日期';
+      return;
+    }
+    if(start > end){
+      resultEl.textContent = '開始日期不能晚於結束日期';
+      return;
+    }
+    let issuedSum = 0, usedSum = 0;
+    Object.keys(byDayData).forEach(d => {
+      if(d >= start && d <= end){
+        issuedSum += byDayData[d].issued;
+        usedSum += byDayData[d].used;
+      }
+    });
+    const rate = issuedSum ? ((usedSum / issuedSum) * 100).toFixed(1) : '0.0';
+    resultEl.innerHTML = `${start} ～ ${end}<br/>發放共 <b>${issuedSum}</b> 張，兌換共 <b>${usedSum}</b> 張（核銷率 ${rate}%）`;
+  }
+  document.getElementById('calcRangeBtn').onclick = calcRange;
+
+  function renderDetail(dateKey){
+    const rows = allCoupons
+      .filter(c => c.used && usedDateStr(c.used_at) === dateKey)
+      .sort((a,b) => new Date(a.used_at) - new Date(b.used_at));
+
+    document.getElementById('detailSummary').textContent = dateKey
+      ? `${dateKey} 當日核銷共 ${rows.length} 筆`
+      : '尚無核銷紀錄';
+
+    document.getElementById('detailBody').innerHTML = rows.length
+      ? rows.map(c => `
+          <tr>
+            <td>${formatTime(c.used_at)}</td>
+            <td>${c.code}</td>
+            <td>${c.display_name || '-'}</td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="3" style="text-align:center;padding:14px;">這天還沒有核銷紀錄</td></tr>';
+  }
+
+  async function loadDashboard(){
+    const { data: coupons, error } = await supabase
+      .from('coupons').select('*').order('issued_at', { ascending:false });
+    if(error){ alert('讀取失敗：' + error.message); return; }
+
+    allCoupons = coupons;
+
+    const total = coupons.length;
+    const used = coupons.filter(c => c.used).length;
+    document.getElementById('numTotal').textContent = total;
+    document.getElementById('numUsed').textContent = used;
+
+    const byDay = {};
+    coupons.forEach(c=>{
+      byDay[c.campaign_date] = byDay[c.campaign_date] || { issued:0, used:0 };
+      byDay[c.campaign_date].issued++;
+      if(c.used) byDay[c.campaign_date].used++;
+    });
+    const days = Object.keys(byDay).sort().reverse();
+    byDayData = byDay;
+    document.getElementById('dayBreakdown').innerHTML = days.length
+      ? days.map(d => `<div style="display:flex;justify-content:space-between;padding:6px 2px;font-size:12.5px;border-bottom:1px dashed #E9D9B0;"><span>${d}</span><span>發放 ${byDay[d].issued}／兌換 ${byDay[d].used}</span></div>`).join('')
+      : '<div style="font-size:12.5px;color:#7c7c92;">尚無資料</div>';
+
+    // 多天彙總報表：第一次載入時才自動帶入預設區間（最早～最新一天），
+    // 之後使用者自己選過的日期，自動更新時不會被蓋掉
+    const rangeStartEl = document.getElementById('rangeStart');
+    const rangeEndEl = document.getElementById('rangeEnd');
+    if(days.length && !rangeStartEl.value && !rangeEndEl.value){
+      const sortedAsc = [...days].sort();
+      rangeStartEl.value = sortedAsc[0];
+      rangeEndEl.value = sortedAsc[sortedAsc.length - 1];
+      calcRange();
+    }
+
+    // 建立「依核銷日期」的下拉選單：只列出真的有核銷紀錄的日期
+    const usedDaySet = new Set();
+    coupons.forEach(c=>{
+      if(c.used){
+        const dk = usedDateStr(c.used_at);
+        if(dk) usedDaySet.add(dk);
+      }
+    });
+    const usedDays = Array.from(usedDaySet).sort().reverse();
+    const todayKey = usedDateStr(new Date().toISOString());
+    const dateFilterEl = document.getElementById('dateFilter');
+    const previousSelection = dateFilterEl.value;
+    dateFilterEl.innerHTML = usedDays.length
+      ? usedDays.map(d => `<option value="${d}">${d}${d === todayKey ? '（今天）' : ''}</option>`).join('')
+      : '<option value="">尚無核銷紀錄</option>';
+    const defaultKey = usedDays.includes(previousSelection)
+      ? previousSelection
+      : (usedDays.includes(todayKey) ? todayKey : (usedDays[0] || ''));
+    dateFilterEl.value = defaultKey;
+    renderDetail(defaultKey);
+
+    document.getElementById('tblBody').innerHTML = coupons.slice(0,200).map(c => `
+      <tr>
+        <td>${c.code}</td>
+        <td>${c.display_name || '-'}</td>
+        <td>${c.campaign_date}</td>
+        <td>${formatTime(c.used_at)}</td>
+        <td><span class="pill ${c.used ? 'pill-used' : 'pill-open'}">${c.used ? '已兌換' : '未使用'}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" style="text-align:center;padding:14px;">尚無資料</td></tr>';
+  }
+})();
+</script>
+</body>
+</html>
